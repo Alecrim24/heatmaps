@@ -1,0 +1,711 @@
+library(DESeq2)
+library(ggplot2)
+library(dplyr)  # Loads dplyr, which provides %>% and filter()
+library(tidyverse)
+
+
+########## Hydnophytum moseleyanum features count path
+featurescountdata_path_hm <- "C:/Users/bop21gwh/Documents/PhD work/hisat/hisat2_hm.txt"
+
+meta_data_file_path_hm <- "C:/Users/bop21gwh/Documents/PhD work/genomics/Hisat2/metadata.csv"
+#gtf_annotation_new_hm
+
+# Read the data from a tab-separated text file
+countdata_features_hm <- read.table(featurescountdata_path_hm, header = TRUE, sep = "\t")
+# View the first few rows
+head(countdata_features_hm)
+print(colnames(countdata_features_hm))
+
+
+# Check count data dimensions
+cat("Count data dimensions:", dim(countdata_features_hm), "\n")
+headers_hm <- colnames(countdata_features_hm)
+print(headers_hm)
+
+# Filter out unnecessary columns
+filtered_featurecounts_hm <- countdata_features_hm[, -c(2:8)]  # Remove columns 2 to 6
+rownames(filtered_featurecounts_hm) <- filtered_featurecounts_hm$Geneid
+# check the column names to match the metadata
+print(colnames(filtered_featurecounts_hm))
+
+######################
+
+
+################## metadata processing ##################
+library(readr)
+# Load metadata
+meta_data_new_hm <- read.csv(meta_data_file_path_hm)
+print(colnames(meta_data_new_hm))
+head(meta_data_new_hm)
+
+
+filtered_meta_data_h.m <- meta_data_new_hm[meta_data_new_hm$Species == "H.m", ]
+
+
+print(filtered_meta_data_h.m)
+
+# Extract sample names from metadata_filtered
+metadata_samples_hm <- filtered_meta_data_h.m$Sample
+print(metadata_samples_hm)
+
+# Extract column names from countdata_mb_filtered (excluding the 'Geneid' column)
+countdata_hm_features <- colnames(filtered_featurecounts_hm)[-1]
+print(countdata_hm_features)
+
+################## Hydnophytum moseleyanum
+
+############################ dds now
+
+# Ensure all columns in countdata_mb_filtered are present in metadata_filtered$Sample
+countdata_filtered_features_hm <- filtered_featurecounts_hm[, match(metadata_samples_hm, countdata_hm_features) + 1]
+
+# Set row names to the gene IDs from the first column of countdata_mb_filtered
+rownames(filtered_featurecounts_hm) <- filtered_featurecounts_hm$Geneid
+print(countdata_filtered_features_hm)
+
+
+# Create DESeq2 dataset
+dds_hm <- DESeqDataSetFromMatrix(
+  countData = round(countdata_filtered_features_hm),
+  colData = filtered_meta_data_h.m,
+  design = ~ Tissue # Adjust 'Condition' to the appropriate variable from your metadata
+)
+
+dds_2_hm <- DESeq(dds_hm)
+print(dds_2_hm)
+
+ntd_hm <- vst(dds_2_hm, blind = FALSE)
+########################################## works
+
+# Check for the presence of genes in dds_2_hm
+gene_presence_hm <- nitrogen_genes_cleaned %in% rownames(dds_2_hm)
+print(gene_presence_hm)  # Shows TRUE for present genes and FALSE for missing ones
+
+# Extract normalized counts from dds_2_hm
+norm_counts_hm <- counts(dds_2_hm, normalized = TRUE)
+
+print(colnames(dds_2_hm))
+
+# Filter the normalized counts to include only nitrogen-related genes
+counts_nitrogen_genes_hm <- norm_counts_hm[rownames(norm_counts_hm) %in% nitrogen_genes_cleaned, , drop = FALSE]
+print(colnames(counts_nitrogen_genes_hm))
+# Check the subset to ensure it has values
+print(dim(counts_nitrogen_genes_hm))
+print(counts_nitrogen_genes_hm)
+
+######################
+
+#############
+
+# Clean the gene IDs by removing the ".1" suffix
+nitrogen_genes_cleaned <- gsub("\\.1$", "", nitrogen_genes)
+head(nitrogen_genes_cleaned)
+# Filter for genes present in the dataset
+gene_presence_hm <- nitrogen_genes_cleaned %in% rownames(dds_2_hm)
+nitrogen_genes_present_hm <- nitrogen_genes_cleaned[gene_presence_hm]
+
+hm_samples <- c(
+  "X74.76.H_m.Control_ants.P1.Warty_ATCTAACCTG.CCTGTGGTTC_L007.hisat.sorted.bam",
+  "X86.80.H_m.Control_ants.P2.Warty_AGCACCAGTC.CTCGTGTAGC_L007.hisat.sorted.bam",
+  "X87.84.H_m.Control_ants.P3.Warty_TACCTAGACT.GCATTCGAAT_L007.hisat.sorted.bam"
+)
+
+# Extract normalized counts for nitrogen-related genes from dds_2
+norm_counts_hm <- counts(dds_2_hm, normalized = TRUE)
+counts_nitrogen_genes_hm <- norm_counts_hm[rownames(norm_counts_hm) %in% nitrogen_genes_present_hm, hm_samples, drop = FALSE]
+print(colnames(counts_nitrogen_genes_hm))
+# Filter and reorder metadata based on the selected and ordered samples
+# Filter and reorder metadata based on the selected and ordered samples
+###############################
+#### Filtering for specific tissues such as warty tissues
+#################################
+print(dim(counts_nitrogen_genes_hm))
+
+
+# Define the pattern for matching the sample names
+pattern_hm <- "H_m.Control_ants.P.*.Warty.*"
+
+# Extract the column names from the DESeqDataSet
+sample_names_hm <- colnames(dds_2_hm)
+
+
+# Use grep or grepl to filter sample names based on the pattern
+filtered_samples_hm <- sample_names_hm[grepl(pattern_hm, sample_names_hm)]
+
+# Now filter the DESeqDataSet to include only these samples
+dds_filtered_hm <- dds_2_hm[, colnames(dds_2_hm) %in% filtered_samples_hm]
+
+# Create the metadata dataframe with selected Plant and Tissue columns
+df_filt_hm <- as.data.frame(colData(dds_filtered_hm)[, c("Plant", "Tissue")])
+
+# Filter the data to focus on "Warty" tissues
+df_filt_warty <- df_filt_hm[df_filt_hm$Tissue %in% c("Warty"), ]
+#################################################################
+# Create custom labels using the reordered metadata for heatmap using metadata
+custom_labels <- setNames(df_filt_hm$Tissue, rownames(df_filt_hm))[colnames(counts_nitrogen_genes_hm)]
+
+# Verify the custom labels
+print(custom_labels)
+
+#################################################################
+#################################################################
+#################################################################
+#################################################################
+#################################################################
+################# Heat map for H.m ant warty tissue #############
+#################################################################
+#################################################################
+#################################################################
+#################################################################
+
+library(ComplexHeatmap)
+
+# Generate the heatmap with custom x-axis labels
+Heatmap(
+  counts_nitrogen_genes_hm,                 # Expression data
+  name = "Expression",                      # Color scale name
+  cluster_rows = TRUE,                      # Cluster rows (genes)
+  cluster_columns = FALSE,                  # Do not cluster columns
+  show_row_names = TRUE,                    # Show row names
+  show_column_names = TRUE,                 # Show column names
+  column_labels = custom_labels,            # Use custom labels for x-axis
+  top_annotation = HeatmapAnnotation(
+    Tissue = df_filt_hm$Tissue,             # Annotate with Tissue info
+    annotation_name_side = "left",
+    col = list(Tissue = c("Warty" = "red")) # Customize colors for tissue types
+  ),
+  show_heatmap_legend = TRUE,               # Show legend
+  column_title = "Nitrogen-Related Genes for Selected Samples (H.m)",  # Title for heatmap
+  row_title = "Nitrogen Genes",             # Title for row axis
+  row_title_gp = gpar(fontsize = 12),       # Font size for row title
+  column_title_gp = gpar(fontsize = 12)     # Font size for column title
+)
+
+
+##################################
+
+########## Myrmecodia beccarii features count path
+
+
+# Step 1: Load metadata
+meta_data_file_path_mb <- "C:/Users/bop21gwh/Documents/PhD work/genomics/Hisat2/metadata.csv"
+meta_data_new_mb <- read.csv(meta_data_file_path_mb)
+print(colnames(meta_data_new_mb))
+head(meta_data_new_mb)
+
+# Step 2: Filter metadata to include only M.b species
+filtered_meta_data_m.b <- meta_data_new_mb[meta_data_new_mb$Species == "M.b", ]
+print(filtered_meta_data_m.b)
+
+# Extract sample names from the filtered metadata
+metadata_samples_mb <- filtered_meta_data_m.b$Sample
+print(metadata_samples_mb)
+
+#####################################################
+# Step 3: Load count data
+featurescountdata_path_mb <- "C:/Users/bop21gwh/Documents/PhD work/hisat/featurescount_mb_with_M.b.gff.txt"
+countdata_mb_raw <- read.table(featurescountdata_path_mb, header = TRUE, sep = "\t")
+head(countdata_mb_raw)
+
+# Filter out unnecessary columns (Remove columns 2 to 6)
+filtered_featurecounts_mb_1 <- countdata_mb_raw[, -c(2:6)]  # Adjust this range if necessary
+print(colnames(filtered_featurecounts_mb_1))
+
+# Set row names to the Geneid column
+rownames(filtered_featurecounts_mb_1) <- filtered_featurecounts_mb_1$Geneid
+
+# Check the dimensions of the filtered count data
+cat("Count data dimensions:", dim(filtered_featurecounts_mb_1), "\n")
+print(colnames(filtered_featurecounts_mb_1))
+
+#####################################################
+# Step 4: Modify column names to match metadata sample names
+
+# Remove the specified prefix from all column names in filtered_featurecounts_mb
+colnames(filtered_featurecounts_mb_1) <- gsub(".*\\.nobackup\\.qkdf72\\.hisat2\\.m\\.b_results\\.", "", colnames(filtered_featurecounts_mb_1))
+print(colnames(filtered_featurecounts_mb))
+
+# Add "X" prefix to sample names (excluding the first column, 'Geneid')
+colnames(filtered_featurecounts_mb_1)[-1] <- paste0("X", colnames(filtered_featurecounts_mb_1)[-1])
+
+# Check modified column names
+head(colnames(filtered_featurecounts_mb_1))
+
+#####################################################
+# Step 5: Match metadata sample names with count data column names
+
+# Ensure all columns in filtered_featurecounts_mb match with metadata samples
+matched_indices <- match(metadata_samples_mb, colnames(filtered_featurecounts_mb_1))
+
+# Check if any samples do not match and stop if necessary
+if (any(is.na(matched_indices))) {
+  cat("Warning: The following metadata samples do not match any columns in the count data:\n")
+  print(setdiff(metadata_samples_mb, colnames(filtered_featurecounts_mb_1)))
+  stop("Fix the mismatched sample names before proceeding.")
+}
+
+# Filter the count data based on matched indices
+countdata_filtered_features_mb <- filtered_featurecounts_mb_1[, matched_indices, drop = FALSE]
+
+# Set row names to the gene IDs
+rownames(countdata_filtered_features_mb) <- filtered_featurecounts_mb_1$Geneid
+
+# Check the filtered count data
+cat("Filtered count data dimensions:", dim(countdata_filtered_features_mb), "\n")
+head(countdata_filtered_features_mb)
+
+#####################################################
+# Step 6: Create DESeqDataSet (dds) object
+
+# Ensure the metadata has the appropriate structure for DESeq2 (it should have columns like 'Sample' and 'Condition')
+# For example, you may have something like this:
+# filtered_meta_data_m.b$Condition <- factor(filtered_meta_data_m.b$Condition)
+
+# Match metadata and count data
+dds <- DESeqDataSetFromMatrix(
+  countData = countdata_filtered_features_mb,
+  colData = filtered_meta_data_m.b,
+  design = ~ Tissue)  # Adjust 'Condition' to your variable of interest
+
+
+dds_mb <- DESeq(dds)
+#####################################################
+#####################################################  gritty works
+#####################################################
+
+
+
+# Filter the normalized counts to include only nitrogen-related genes
+norm_counts_mb <- counts(dds_mb, normalized = TRUE)  # Extract normalized counts from dds_mb
+counts_nitrogen_genes_mb <- norm_counts_mb[rownames(norm_counts_mb) %in% nitrogen_genes_cleaned, , drop = FALSE]
+print(colnames(counts_nitrogen_genes_mb))
+
+# Check the subset to ensure it has values
+print(dim(counts_nitrogen_genes_mb))
+print(counts_nitrogen_genes_mb)
+
+######################
+
+# Clean the gene IDs by removing the ".1" suffix
+nitrogen_genes_cleaned_mb <- gsub("\\.1$", "", nitrogen_genes)
+head(nitrogen_genes_cleaned_mb)
+
+# Filter for genes present in the dataset
+gene_presence_mb <- nitrogen_genes_cleaned_mb %in% rownames(norm_counts_mb)
+nitrogen_genes_present_mb <- nitrogen_genes_cleaned_mb[gene_presence_mb]
+
+# Extract normalized counts for nitrogen-related genes from dds_mb
+counts_nitrogen_genes_mb <- norm_counts_mb[rownames(norm_counts_mb) %in% nitrogen_genes_present_mb, , drop = FALSE]
+print(colnames(counts_nitrogen_genes_mb))
+
+###############################
+#### Filtering for specific tissues such as Warty tissues
+#################################
+
+# Define the pattern for matching the sample names
+pattern_mb <- "M_b.No_ants.P.*.Warty.*"
+
+# Extract the column names from the DESeqDataSet
+sample_names_mb <- colnames(dds_mb)
+
+# Use grep or grepl to filter sample names based on the pattern
+filtered_samples_mb <- sample_names_mb[grepl(pattern_mb, sample_names_mb)]
+
+# Now filter the DESeqDataSet to include only these samples
+dds_filtered_mb <- dds_mb[, colnames(dds_mb) %in% filtered_samples_mb]
+
+# Create the metadata dataframe with selected Plant and Tissue columns
+df_filt_mb <- as.data.frame(colData(dds_filtered_mb)[, c("Plant", "Tissue")])
+
+# Filter the data to focus on "Warty" tissues
+df_filt_warty_mb <- df_filt_mb[df_filt_mb$Tissue %in% c("Warty"), ]
+
+#################################################################
+# Create custom labels using the reordered metadata
+custom_labels_mb <- setNames(df_filt_mb$Tissue, rownames(df_filt_mb))[colnames(counts_nitrogen_genes_mb)]
+print(custom_labels_mb)
+
+#####################################################
+################################ Heat map mb
+#####################################################
+
+# Load required library
+library(ComplexHeatmap)
+library(circlize)  # For additional color utilities
+
+# Generate the heatmap with the filtered nitrogen gene expression data
+Heatmap(
+  counts_nitrogen_genes_mb,                    # Expression data (filtered count matrix)
+  name = "Expression",                         # Color scale name
+  cluster_rows = TRUE,                         # Cluster rows (genes)
+  cluster_columns = TRUE,                      # Cluster columns (samples)
+  show_row_names = TRUE,                       # Show row names (gene names)
+  show_column_names = TRUE,                    # Show column names (sample names)
+  top_annotation = HeatmapAnnotation(
+    Tissue = custom_labels_mb,                 # Annotate with Tissue info
+    annotation_name_side = "left",
+    col = list(Tissue = c("Warty" = "red"))    # Customize colors for tissue types
+  ),
+  show_heatmap_legend = TRUE,                  # Show legend
+  column_title = "Nitrogen-Related Genes for Selected Samples",  # Title for heatmap
+  row_title = "Nitrogen Genes",                # Title for row axis
+  row_title_gp = gpar(fontsize = 12),          # Font size for row title
+  column_title_gp = gpar(fontsize = 12)        # Font size for column title
+)
+
+
+
+
+
+######################################
+####### NITROGEN GENE EXTRACTION CODE 
+#########################################
+# Install and load the `readr` package if you haven’t already
+if (!requireNamespace("readr", quietly = TRUE)) {
+  install.packages("readr")
+}
+library(readr)
+
+# Define the file path and load the data
+#USED FOR BOTH SPECIES
+interproscan_path <- "C:/Users/bop21gwh/Documents/PhD work/hisat/output_file_m.b.tsv"
+interpro_data <- read_tsv(interproscan_path)
+
+# Check the first few rows to ensure it loaded correctly
+head(interpro_data)
+
+# Check the column names and structure of the data
+colnames(interpro_data)
+head(interpro_data)
+
+
+# Examine the column names in your data to identify GO term or description columns
+colnames(interpro_data)
+
+# Assume there's a column with descriptions or GO terms, let's call it "Description" here
+# Adjust "Description" to the actual name in your data
+
+
+
+######################################
+
+
+# Assign column names (adjust these as necessary to match your data structure)
+colnames(interpro_data) <- c("Protein_ID", "MD5sum", "Length", "Database", "Database_Acc", 
+                             "Description", "Start", "End", "E-value", "Status", "Date", 
+                             "InterPro_ID", "InterPro_Desc", "GO_Terms", "Pathways")
+
+# View the data to ensure it loaded correctly
+head(interpro_data)
+
+# Filter for rows containing the term "nitrate"
+nitrate_genes <- interpro_data %>%
+  filter(grepl("nitrate", Description, ignore.case = TRUE))
+
+# Check the first few rows of the filtered data
+print(nitrate_genes)
+# Filter for rows containing the term "nitrate" in either Description or InterPro_Desc
+nitrate_genes <- interpro_data %>%
+  filter(grepl("nitrate", Description, ignore.case = TRUE) | grepl("nitrate", InterPro_Desc, ignore.case = TRUE))
+
+# Check the first few rows of the filtered data
+print(nitrate_genes)
+print(nitrate_genes$Protein_ID) # nitrate genes
+
+
+# Filter for rows containing the term "nitrite" in either Description or InterPro_Desc
+nitrite_genes <- interpro_data %>%
+  filter(grepl("nitrite", Description, ignore.case = TRUE) | grepl("nitrite", InterPro_Desc, ignore.case = TRUE))
+
+# Check the first few rows of the filtered data
+print(nitrite_genes)
+print(nitrite_genes$Protein_ID) # nitrate genes
+
+# search for ammonium genes
+Ammonium_genes <- interpro_data %>%
+  filter(grepl("Ammonium", Description, ignore.case = TRUE) | grepl("Ammonium", InterPro_Desc, ignore.case = TRUE))
+
+print(Ammonium_genes)
+print(Ammonium_genes$Protein_ID)
+
+# now make a varaible with the list of genes related
+
+nitrogen_genes <- c("_ptg000020l_000523.1","_ptg000014l_000283.1","_ptg000023l_000078.1","_ptg000017l_000842.1","_ptg000017l_000842.1",
+                    "_ptg000017l_000842.1","_ptg000017l_000842.1","_ptg000017l_000842.1","_ptg000017l_000842.1","_ptg000017l_000842.1",
+                    "_ptg000017l_000842.1","_ptg000017l_000842.1","_ptg000017l_000842.1","_ptg000017l_000549.1","_ptg000023l_000333.1",
+                    "_ptg000023l_000333.1","_ptg000023l_000333.1","_ptg000023l_000333.1","_ptg000023l_000333.1","_ptg000023l_000333.1",
+                    "_ptg000023l_000333.1","_ptg000023l_000333.1","_ptg000023l_000333.1","_ptg000006l_000493.1","_ptg000006l_000493.1",
+                    "_ptg000006l_000493.1","_ptg000006l_000493.1","_ptg000006l_000493.1","_ptg000023l_000333.1","_ptg000006l_000493.1",
+                    "_ptg000006l_000493.1","_ptg000006l_000493.1","_ptg000006l_000493.1","_ptg000006l_000493.1","_ptg000014l_000855.1")
+
+# Step 1: Count the number of genes in the nitrogen_genes list
+gene_count <- length(nitrogen_genes)
+cat("Number of genes:", gene_count, "\n")
+
+# Step 2: Remove the ".1" suffix from the gene IDs
+nitrogen_genes_cleaned <- gsub("\\.1$", "", nitrogen_genes)
+
+# Display cleaned genes
+head(nitrogen_genes_cleaned)
+count <- length(nitrogen_genes_cleaned)
+cat("Number of genes:", count, "\n")
+
+##################### what is here
+# Check for the presence of genes in dds_2
+gene_presence <- nitrogen_genes_cleaned %in% rownames(dds_2_hm)
+print(gene_presence)  # Shows TRUE for present genes and FALSE for missing ones
+
+
+
+######################################################
+################ Comparing species
+
+
+
+# Define sample names for H.m and M.b
+hm_samples <- c(
+  "X74.76.H_m.Control_ants.P1.Warty_ATCTAACCTG.CCTGTGGTTC_L007.hisat.sorted.bam",
+  "X86.80.H_m.Control_ants.P2.Warty_AGCACCAGTC.CTCGTGTAGC_L007.hisat.sorted.bam",
+  "X87.84.H_m.Control_ants.P3.Warty_TACCTAGACT.GCATTCGAAT_L007.hisat.sorted.bam"
+)
+
+mb_samples <- c(
+  "X62.64.M_b.Control_ants.P1.Warty_GCAGAAGTCT.CTGCGTCGAA_L007.hisat.sorted.bam",
+  "X66.68.M_b.Control_ants.P2.Warty_CAAGACGGAC.GTACTCCGTC_L007.hisat.sorted.bam",
+  "X70.72.M_b.Control_ants.P3.Warty_TGTCGGTGCT.AGTTCTTCCG_L007.hisat.sorted.bam"
+)
+
+# Combine sample names from both species
+combined_samples <- c(hm_samples, mb_samples)
+
+# Combine count data for selected samples
+combined_counts <- cbind(
+  counts_nitrogen_genes_hm[, hm_samples, drop = FALSE],  # H. m. counts
+  counts_nitrogen_genes_mb[, mb_samples, drop = FALSE]  # M. b. counts
+)
+print(combined_counts)
+# Print the dimensions to ensure correct merging
+print(dim(combined_counts))
+
+# Combine metadata
+combined_metadata <- rbind(
+  colData(dds_filtered_hm)[hm_samples, , drop = FALSE],  # H. m. metadata
+  colData(dds_filtered_mb)[mb_samples, , drop = FALSE]  # M. b. metadata
+)
+
+# Verify metadata alignment
+print(combined_metadata)
+
+# Create custom labels for the x-axis using tissue names
+custom_labels_combined <- combined_metadata$Tissue
+
+print(custom_labels_combined)
+
+# Generate heatmap with the combined counts and metadata
+Heatmap(
+  combined_counts,                             # Combined expression data
+  name = "Expression",                         # Color scale name
+  cluster_rows = TRUE,                         # Cluster rows (genes)
+  cluster_columns = TRUE,                      # Cluster columns (samples)
+  show_row_names = TRUE,                       # Show row names (gene names)
+  show_column_names = TRUE,                    # Show column names (sample names)
+  column_labels = custom_labels_combined,      # Use tissue names for x-axis labels
+  top_annotation = HeatmapAnnotation(
+    Tissue = custom_labels_combined,           # Annotate with Tissue info
+    annotation_name_side = "left",
+    col = list(Tissue = c("Warty" = "red"))    # Customize colors for tissue types
+  ),
+  show_heatmap_legend = TRUE,                  # Show legend
+  column_title = "Nitrogen-Related Genes for Selected Samples",  # Heatmap title
+  row_title = "Nitrogen Genes",                # Row axis title
+  row_title_gp = gpar(fontsize = 12),          # Font size for row title
+  column_title_gp = gpar(fontsize = 12)        # Font size for column title
+)
+
+
+#########################################################
+
+# Extract sample names from metadata
+metadata_samples_hm <- filtered_meta_data_h.m$Sample
+metadata_samples_mb <- filtered_meta_data_m.b$Sample
+
+# Extract column names from count data
+countdata_hm_features <- colnames(filtered_featurecounts_hm)[-1]
+countdata_mb_features <- colnames(filtered_featurecounts_mb)[-1]
+
+# Define expected sample names for H.m and M.b
+hm_samples <- c(
+  "X74.76.H_m.Control_ants.P1.Warty_ATCTAACCTG.CCTGTGGTTC_L007.hisat.sorted.bam",
+  "X86.80.H_m.Control_ants.P2.Warty_AGCACCAGTC.CTCGTGTAGC_L007.hisat.sorted.bam",
+  "X87.84.H_m.Control_ants.P3.Warty_TACCTAGACT.GCATTCGAAT_L007.hisat.sorted.bam"
+)
+
+mb_samples <- c(
+  "X62.64.M_b.Control_ants.P1.Warty_GCAGAAGTCT.CTGCGTCGAA_L007.hisat.sorted.bam",
+  "X66.68.M_b.Control_ants.P2.Warty_CAAGACGGAC.GTACTCCGTC_L007.hisat.sorted.bam",
+  "X70.72.M_b.Control_ants.P3.Warty_TGTCGGTGCT.AGTTCTTCCG_L007.hisat.sorted.bam"
+)
+
+# Combine expected sample names
+combined_samples <- c(hm_samples, mb_samples)
+
+# Check if metadata samples match the expected lists
+hm_metadata_matches <- all(hm_samples %in% metadata_samples_hm)
+mb_metadata_matches <- all(mb_samples %in% metadata_samples_mb)
+
+print("H.m Metadata Matches:")
+print(hm_metadata_matches)
+
+print("M.b Metadata Matches:")
+print(mb_metadata_matches)
+
+# Check if count data columns match the expected lists
+hm_counts_matches <- all(hm_samples %in% countdata_hm_features)
+mb_counts_matches <- all(mb_samples %in% countdata_mb_features)
+
+print("H.m Count Data Matches:")
+print(hm_counts_matches)
+
+print("M.b Count Data Matches:")
+print(mb_counts_matches)
+
+# Identify mismatches if any
+hm_mismatched_metadata <- setdiff(hm_samples, metadata_samples_hm)
+mb_mismatched_metadata <- setdiff(mb_samples, metadata_samples_mb)
+
+hm_mismatched_counts <- setdiff(hm_samples, countdata_hm_features)
+mb_mismatched_counts <- setdiff(mb_samples, countdata_mb_features)
+
+print("Mismatched H.m Samples in Metadata:")
+print(hm_mismatched_metadata)
+
+print("Mismatched M.b Samples in Metadata:")
+print(mb_mismatched_metadata)
+
+print("Mismatched H.m Samples in Count Data:")
+print(hm_mismatched_counts)
+
+print("Mismatched M.b Samples in Count Data:")
+print(mb_mismatched_counts)
+
+
+
+
+
+# Generate heatmap with the original sample names on the x-axis
+Heatmap(
+  combined_counts,                             # Combined expression data
+  name = "Expression",                         # Color scale name
+  cluster_rows = TRUE,                         # Cluster rows (genes)
+  cluster_columns = TRUE,                      # Cluster columns (samples)
+  show_row_names = TRUE,                       # Show row names (gene names)
+  show_column_names = TRUE,                    # Show column names (sample names)
+  column_labels = colnames(combined_counts),   # Use original sample names for x-axis labels
+  top_annotation = HeatmapAnnotation(
+    Tissue = combined_metadata$Tissue,         # Annotate with Tissue info
+    annotation_name_side = "left",
+    col = list(Tissue = c("Warty" = "red"))    # Customize colors for tissue types
+  ),
+  show_heatmap_legend = TRUE,                  # Show legend
+  column_title = "Nitrogen-Related Genes for Selected Samples",  # Heatmap title
+  row_title = "Nitrogen Genes",                # Row axis title
+  row_title_gp = gpar(fontsize = 12),          # Font size for row title
+  column_title_gp = gpar(fontsize = 12)        # Font size for column title
+)
+
+
+
+
+#####################
+# Subset metadata for the provided samples
+selected_metadata_hm <- filtered_meta_data_h.m[filtered_meta_data_h.m$Sample %in% hm_samples, ]
+selected_metadata_mb <- filtered_meta_data_m.b[filtered_meta_data_m.b$Sample %in% mb_samples, ]
+
+# Combine metadata for H.m and M.b
+combined_metadata <- rbind(selected_metadata_hm, selected_metadata_mb)
+
+# Extract tissue labels for the heatmap
+custom_labels_combined <- combined_metadata$Tissue
+
+# Subset count data for the selected samples
+combined_counts <- cbind(
+  filtered_featurecounts_hm[, hm_samples, drop = FALSE],  # H.m counts
+  filtered_featurecounts_mb[, mb_samples, drop = FALSE]  # M.b counts
+)
+
+# Verify alignment
+if (!all(colnames(combined_counts) == combined_metadata$Sample)) {
+  stop("Mismatch between count data columns and metadata rows!")
+}
+
+# Plot the heatmap
+library(ComplexHeatmap)
+
+Heatmap(
+  combined_counts,                             # Combined expression data
+  name = "Expression",                         # Color scale name
+  cluster_rows = TRUE,                         # Cluster rows (genes)
+  cluster_columns = TRUE,                      # Cluster columns (samples)
+  show_row_names = TRUE,                       # Show row names (gene names)
+  show_column_names = TRUE,                    # Show column names (sample names)
+  column_labels = custom_labels_combined,      # Use tissue names for x-axis labels
+  top_annotation = HeatmapAnnotation(
+    Tissue = custom_labels_combined,           # Annotate with Tissue info
+    annotation_name_side = "left",
+    col = list(Tissue = c("Warty" = "red"))    # Customize colors for tissue types
+  ),
+  show_heatmap_legend = TRUE,                  # Show legend
+  column_title = "Nitrogen-Related Genes for Selected Samples",  # Heatmap title
+  row_title = "Nitrogen Genes",                # Row axis title
+  row_title_gp = gpar(fontsize = 12),          # Font size for row title
+  column_title_gp = gpar(fontsize = 12)        # Font size for column title
+)
+#############################
+# Subset metadata for the provided samples
+selected_metadata_hm <- filtered_meta_data_h.m[filtered_meta_data_h.m$Sample %in% hm_samples, ]
+selected_metadata_mb <- filtered_meta_data_m.b[filtered_meta_data_m.b$Sample %in% mb_samples, ]
+
+# Combine metadata for H.m and M.b
+combined_metadata <- rbind(selected_metadata_hm, selected_metadata_mb)
+
+# Create combined labels with Species and Tissue
+custom_labels_combined <- paste(combined_metadata$Species, combined_metadata$Tissue, sep = " - ")
+
+# Subset count data for the selected samples
+combined_counts <- cbind(
+  filtered_featurecounts_hm[, hm_samples, drop = FALSE],  # H.m counts
+  filtered_featurecounts_mb[, mb_samples, drop = FALSE]  # M.b counts
+)
+
+# Verify alignment
+if (!all(colnames(combined_counts) == combined_metadata$Sample)) {
+  stop("Mismatch between count data columns and metadata rows!")
+}
+
+# Plot the heatmap
+library(ComplexHeatmap)
+
+Heatmap(
+  combined_counts,                             # Combined expression data
+  name = "Expression",                         # Color scale name
+  cluster_rows = TRUE,                         # Cluster rows (genes)
+  cluster_columns = TRUE,                      # Cluster columns (samples)
+  show_row_names = TRUE,                       # Show row names (gene names)
+  show_column_names = TRUE,                    # Show column names (sample names)
+  column_labels = custom_labels_combined,      # Use Species and Tissue names for x-axis labels
+  top_annotation = HeatmapAnnotation(
+    Species_Tissue = custom_labels_combined,   # Annotate with Species and Tissue info
+    annotation_name_side = "left",
+    col = list(
+      Species_Tissue = c(
+        "H.m - Warty" = "red",
+        "M.b - Warty" = "blue"                 # Customize colors for each species-tissue combination
+      )
+    )
+  ),
+  show_heatmap_legend = TRUE,                  # Show legend
+  column_title = "Nitrogen-Related Genes for Selected Samples",  # Heatmap title
+  row_title = "Nitrogen Genes",                # Row axis title
+  row_title_gp = gpar(fontsize = 12),          # Font size for row title
+  column_title_gp = gpar(fontsize = 12)        # Font size for column title
+)
