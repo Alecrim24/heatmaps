@@ -1,0 +1,170 @@
+library(readr)
+
+# Define the file path and load the data
+#USED FOR BOTH SPECIES
+interproscan_path <- "C:/Users/bop21gwh/Documents/PhD work/hisat/output_directory.tsv"
+interpro_data <- read_tsv(interproscan_path)
+
+# Check the first few rows to ensure it loaded correctly
+head(interpro_data)
+
+# Check the column names and structure of the data
+colnames(interpro_data)
+head(interpro_data)
+
+
+# Examine the column names in your data to identify GO term or description columns
+colnames(interpro_data)
+
+# Assume there's a column with descriptions or GO terms, let's call it "Description" here
+# Adjust "Description" to the actual name in your data
+
+# Assign column names (adjust these as necessary to match your data structure)
+colnames(interpro_data) <- c("Protein_ID", "MD5sum", "Length", "Database", "Database_Acc", 
+                             "Description", "Start", "End", "E-value", "Status", "Date", 
+                             "InterPro_ID", "InterPro_Desc", "GO_Terms", "Pathways")
+
+# View the data to ensure it loaded correctly
+head(interpro_data)
+
+##############
+
+# Filter rows where "urease" is mentioned in Protein_ID or Description
+permease_data <- interpro_data %>%
+  filter(grepl("Amino acid permease", Protein_ID, ignore.case = TRUE) | 
+           grepl("Amino acid permease", Description, ignore.case = TRUE)) %>%
+  select(Protein_ID, Description)
+
+
+
+# View the filtered data
+head(permease_data)
+########### urea
+
+# Remove trailing ".1" or similar suffixes from Protein_ID
+permease_data <- permease_data %>%
+  mutate(Protein_ID = sub("\\.\\d+$", "", Protein_ID))
+
+# View the cleaned data
+head(permease_data)
+
+
+#make gene list
+protein_ids <- permease_data$Protein_ID
+
+head(protein_ids)
+
+###### Combine all BAM file paths into a single vector####
+samples_mixed <- c(
+  "X2.2.H_m.No.ants.P1.Warty_CCAACTGTAT.GCGCTAGAGA_L007.hisat.sorted.bam",
+  "X6.6.H_m.No.ants.P2.Warty_ATTCGCACTA.TCTGTATGGT_L007.hisat.sorted.bam",
+  "X10.10.H_m.No.ants.P3.Warty_TGTGACGTAT.GCAGCGTTAG_L007.hisat.sorted.bam",
+  
+  "X3.3.H_m.No.ants.P1.Smooth_GAGTAGTGAC.GCGATGCCAA_L007.hisat.sorted.bam",
+  "X7.7.H_m.No.ants.P2.Smooth_CTCTTCAGCA.TTGTCTCTAC_L007.hisat.sorted.bam",
+  "X11.11.H_m.No.ants.P3.Smooth_AGAAGATTGG.AGAAGGTACT_L007.hisat.sorted.bam",
+  
+  "X1.1.H_m.No.ants.P1.Tuber_TAGCGAGGCT.TTGCTCACGG_L007.hisat.sorted.bam",
+  "X5.5.H_m.No.ants.P2.Tuber_ATCATACCGC.ATGTCGTACT_L007.hisat.sorted.bam",
+  "X9.9.H_m.No.ants.P3.Tuber_TCTGACTATG.TAACCAGATC_L007.hisat.sorted.bam",
+  
+  "X74.76.H_m.Control_ants.P1.Warty_ATCTAACCTG.CCTGTGGTTC_L007.hisat.sorted.bam",
+  "X86.80.H_m.Control_ants.P2.Warty_AGCACCAGTC.CTCGTGTAGC_L007.hisat.sorted.bam",
+  "X87.84.H_m.Control_ants.P3.Warty_TACCTAGACT.GCATTCGAAT_L007.hisat.sorted.bam",
+  
+  "X75.77.H_m.Control_ants.P1.Smooth_GCGACAATAT.ATTCGTACGG_L007.hisat.sorted.bam",
+  "X79.81.H_m.Control_ants.P2.Smooth_TCCGAGATGC.TGTCACCTTA_L007.hisat.sorted.bam",
+  "X83.85.H_m.Control_ants.P3.Smooth_AATCGTGCGG.GTTCAGTAGA_L007.hisat.sorted.bam",
+  
+  "X73.75.H_m.Control_ants.P1.Tuber_CGCACATTAC.TGGAACGTAG_L007.hisat.sorted.bam",
+  "X77.79.H_m.Control_ants.P2.Tuber_GATCCACTTA.GTGTTCTGTT_L007.hisat.sorted.bam",
+  "X81.83.H_m.Control_ants.P3.Tuber_GCATTCCTTC.GAGCCTGCTT_L007.hisat.sorted.bam",
+  
+  "X29.31.M_b.No_ants.P1.Warty_GTGACACGTC.CTTACACTGA_L007.hisat.sorted.bam",
+  "X33.35.M_b.No_ants.P2.Warty_GATAGACAAC.GTGTTCACGT_L007.hisat.sorted.bam",
+  "X37.39.M_b.No_ants.P3.Warty_GTTCTCATCA.CCTCCATTCT_L007.hisat.sorted.bam",
+  
+  "X30.32.M_b.No_ants.P1.Smooth_AATGGACGCG.AAGTGCACCG_L007.hisat.sorted.bam",
+  "X34.36.M_b.No_ants.P2.Smooth_AGCGTCTCAT.CCTAGGCGAT_L007.hisat.sorted.bam",
+  "X38.40.M_b.No_ants.P3.Smooth_CAATGCGTGT.ATGTTCGCGC_L007.hisat.sorted.bam",
+  
+  "X28.30.M_b.No_ants.P1.Tuber_TCGACCAGCA.GTTCGAACTC_L007.hisat.sorted.bam",
+  "X32.34.M_b.No_ants.P2.Tuber_TGGAAGCACA.TCCAACACCG_L007.hisat.sorted.bam",
+  "X36.38.M_b.No_ants.P3.Tuber_ATAGCCGGTT.TCTTATCCGG_L007.hisat.sorted.bam",
+  
+  "X62.64.M_b.Control_ants.P1.Warty_GCAGAAGTCT.CTGCGTCGAA_L007.hisat.sorted.bam",
+  "X66.68.M_b.Control_ants.P2.Warty_CAAGACGGAC.GTACTCCGTC_L007.hisat.sorted.bam",
+  "X70.72.M_b.Control_ants.P3.Warty_TGTCGGTGCT.AGTTCTTCCG_L007.hisat.sorted.bam",
+  
+  "X63.65.M_b.Control_ants.P1.Smooth_TATACGATGC.CTCCTAATCT_L007.hisat.sorted.bam",
+  "X67.69.M_b.Control_ants.P2.Smooth_CCACTCAACG.CCTGTCTAGA_L007.hisat.sorted.bam",
+  "X71.73.M_b.Control_ants.P3.Smooth_TCTACAGCTA.AATGGAAGAC_L007.hisat.sorted.bam",
+  
+  "X61.63.M_b.Control_ants.P1.Tuber_GATAGATCAG.CGTACGCCAT_L007.hisat.sorted.bam",
+  "X65.67.M_b.Control_ants.P2.Tuber_GATTGGCGAT.CTGTCTCATT_L007.hisat.sorted.bam",
+  "X69.71.M_b.Control_ants.P3.Tuber_GCGAAGAATT.TCACGGATGA_L007.hisat.sorted.bam"
+)
+
+
+
+
+
+# Print the samples to check the contents
+print(samples_mixed)
+print(fertilizer_samples)
+
+# Extract the column names from the DESeqDataSet
+sample_names <- colnames(dds_both_specie)
+head(sample_names)
+
+# Step 1: Filter and reorder the DESeqDataSet using 'samples_mixed'
+filtered_samples <- sample_names[sample_names %in% samples_mixed]
+dds_filtered <- dds_both_specie[, filtered_samples]
+
+# Ensure the order of columns in DESeqDataSet matches 'samples_mixed'
+dds_filtered <- dds_filtered[, samples_mixed]
+
+# Step 2: Map Gene Names to Descriptions
+# Ensure permease_data is correctly mapped
+gene_to_description <- setNames(permease_data$Description, permease_data$Protein_ID)
+
+# Step 3: Filter counts to include only the relevant genes
+counts <- counts(dds_filtered, normalized = TRUE)
+matching_genes <- rownames(counts) %in% protein_ids
+
+# Step 4: Update row names of counts_filtered with descriptions from urease_data
+rownames(counts)[matching_genes] <- gene_to_description[rownames(counts)[matching_genes]]
+
+# Step 5: Filter the counts matrix to only include the matching genes
+counts_filtered <- counts[matching_genes, , drop = FALSE]
+
+# Step 6: Ensure that the order of rows in counts_filtered matches the updated gene names
+counts_filtered <- counts_filtered[rownames(counts_filtered) %in% permease_data$Description, , drop = FALSE]
+
+# Step 7: Prepare the metadata for the heatmap
+df_filt <- as.data.frame(colData(dds_filtered)[, c("Plant", "Tissue", "Species")])  # Include Species info
+
+# Step 8: Create custom labels with species initials and tissue
+df_filt$Species_initials <- substr(df_filt$Species, 1, 2)  # Assuming Species column has full names, use first 2 letters as initials
+custom_labels <- paste(df_filt$Species_initials, df_filt$Tissue, sep = "_")  # Combine initials with tissue for custom labels
+
+# Step 9: Generate the heatmap
+Heatmap(
+  counts_filtered,
+  name = "Expression", 
+  cluster_rows = TRUE, 
+  cluster_columns = FALSE, 
+  show_row_names = TRUE, 
+  show_column_names = TRUE, 
+  top_annotation = HeatmapAnnotation(
+    Tissue = df_filt$Tissue,
+    annotation_name_side = "left",
+    col = list(Tissue = c("Warty" = "red", "Smooth" = "blue", "Tuber" = "green"))
+  ),
+  show_heatmap_legend = TRUE,
+  column_title = "Expression of Nitrogen-Related Genes",
+  row_title = "Nitrogen Genes",
+  column_names_gp = gpar(fontsize = 10),  # Adjust column label font size if needed
+  column_title_gp = gpar(fontsize = 12),  # Adjust title font size if needed
+  column_labels = custom_labels  # Use custom labels for the x-axis
+)
