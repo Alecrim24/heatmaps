@@ -1,0 +1,392 @@
+library(DESeq2)
+library(ggplot2)
+library(dplyr)  # Loads dplyr, which provides %>% and filter()
+library(tidyverse)
+
+
+########## Hydnophytum moseleyanum features count path
+featurescountdata_path_hm <- "C:/Users/bop21gwh/Documents/PhD work/hisat/hisat2_hm.txt"
+
+meta_data_file_path_hm <- "C:/Users/bop21gwh/Documents/PhD work/genomics/Hisat2/metadata.csv"
+#gtf_annotation_new_hm
+
+# Read the data from a tab-separated text file
+countdata_features_hm <- read.table(featurescountdata_path_hm, header = TRUE, sep = "\t")
+# View the first few rows
+head(countdata_features_hm)
+print(colnames(countdata_features_hm))
+
+
+# Check count data dimensions
+cat("Count data dimensions:", dim(countdata_features_hm), "\n")
+headers_hm <- colnames(countdata_features_hm)
+print(headers_hm)
+
+# Filter out unnecessary columns
+filtered_featurecounts_hm <- countdata_features_hm[, -c(2:8)]  # Remove columns 2 to 6
+rownames(filtered_featurecounts_hm) <- filtered_featurecounts_hm$Geneid
+# check the column names to match the metadata
+print(colnames(filtered_featurecounts_hm))
+
+######################
+
+
+################## metadata processing ##################
+library(readr)
+# Load metadata
+meta_data_new_hm <- read.csv(meta_data_file_path_hm)
+print(colnames(meta_data_new_hm))
+head(meta_data_new_hm)
+
+
+filtered_meta_data_h.m <- meta_data_new_hm[meta_data_new_hm$Species == "H.m", ]
+
+
+print(filtered_meta_data_h.m)
+
+# Extract sample names from metadata_filtered
+metadata_samples_hm <- filtered_meta_data_h.m$Sample
+print(metadata_samples_hm)
+
+# Extract column names from countdata_mb_filtered (excluding the 'Geneid' column)
+countdata_hm_features <- colnames(filtered_featurecounts_hm)[-1]
+print(countdata_hm_features)
+
+################## Hydnophytum moseleyanum
+
+############################ dds now
+
+# Ensure all columns in countdata_mb_filtered are present in metadata_filtered$Sample
+countdata_filtered_features_hm <- filtered_featurecounts_hm[, match(metadata_samples_hm, countdata_hm_features) + 1]
+
+# Set row names to the gene IDs from the first column of countdata_mb_filtered
+rownames(filtered_featurecounts_hm) <- filtered_featurecounts_hm$Geneid
+print(countdata_filtered_features_hm)
+
+
+# Create DESeq2 dataset
+dds_hm <- DESeqDataSetFromMatrix(
+  countData = round(countdata_filtered_features_hm),
+  colData = filtered_meta_data_h.m,
+  design = ~ Tissue # Adjust 'Condition' to the appropriate variable from your metadata
+)
+
+dds_2_hm <- DESeq(dds_hm)
+print(dds_2_hm)
+
+ntd_hm <- vst(dds_2_hm, blind = FALSE)
+########################################## works
+
+hm_gtf_file <-"C:/Users/bop21gwh/Documents/PhD work/hisat/output_directory.tsv"
+
+head(hm_gtf_file)
+
+interpro_data_hm <- read_tsv(hm_gtf_file)
+
+####### code for searching gene functions in the gtf
+
+# Assign column names (adjust these as necessary to match your data structure)
+colnames(interpro_data_hm) <- c("Protein_ID", "MD5sum", "Length", "Database", "Database_Acc", 
+                             "Description", "Start", "End", "E-value", "Status", "Date", 
+                             "InterPro_ID", "InterPro_Desc", "GO_Terms", "Pathways")
+
+# View the data to ensure it loaded correctly
+head(interpro_data_hm)
+
+# Filter for rows containing the terms "C-terminal (heme d1) domain of cytochrome cd1-nitrite reductase, Nitrite, Nitrate, Ammonium,ammonium, urease, urea, amino acid"
+
+
+# Define keywords to search for
+
+keywords <- c("C-terminal \\(heme d1\\) domain of cytochrome cd1-nitrite reductase", 
+              "Nitrite", "Nitrate")
+
+keywords2 <- c("C-terminal \\(heme d1\\) domain of cytochrome cd1-nitrite reductase", 
+                "Ammonium", "ammonium", "urease", "urea", "Amino acid permease")
+# Filter rows where the Description or InterPro_Desc column contains any of the keywords
+filtered_data <- interpro_data_hm %>% 
+  filter(grepl(paste(keywords, collapse = "|"), Description, ignore.case = TRUE) | 
+           grepl(paste(keywords, collapse = "|"), InterPro_Desc, ignore.case = TRUE))
+
+# View the filtered data
+head(filtered_data$Description)
+head(filtered_data$Protein_ID)
+
+head(filtered_data$InterPro_Desc)
+########################
+
+# Create a dataframe with Gene Names and Descriptions
+gene_description_data <- filtered_data %>% 
+  select(Protein_ID, Description) %>% 
+  rename(Gene_Name = Protein_ID, Gene_Description = Description)
+
+# Remove ".1" or similar suffix from Gene_Name
+gene_description_data$Gene_Name <- gsub("\\.\\d+$", "", gene_description_data$Gene_Name)
+
+# View the first few rows of the cleaned dataframe
+head(gene_description_data)
+
+# Remove duplicates based on Gene_Name and keep the first occurrence
+gene_description_data_no_duplicates <- gene_description_data %>%
+  distinct(Gene_Name, .keep_all = TRUE)
+
+# View the cleaned data
+head(gene_description_data_no_duplicates)
+
+
+#######
+
+
+##############
+
+# use gene_description_data_no_duplicates instead of gene_description_data
+
+#get the mb version from the other r tab
+
+samples_mixed <- c(
+  "X2.2.H_m.No.ants.P1.Warty_CCAACTGTAT.GCGCTAGAGA_L007.hisat.sorted.bam",
+  "X6.6.H_m.No.ants.P2.Warty_ATTCGCACTA.TCTGTATGGT_L007.hisat.sorted.bam",
+  "X10.10.H_m.No.ants.P3.Warty_TGTGACGTAT.GCAGCGTTAG_L007.hisat.sorted.bam",
+  
+  "X3.3.H_m.No.ants.P1.Smooth_GAGTAGTGAC.GCGATGCCAA_L007.hisat.sorted.bam",
+  "X7.7.H_m.No.ants.P2.Smooth_CTCTTCAGCA.TTGTCTCTAC_L007.hisat.sorted.bam",
+  "X11.11.H_m.No.ants.P3.Smooth_AGAAGATTGG.AGAAGGTACT_L007.hisat.sorted.bam",
+  
+  "X1.1.H_m.No.ants.P1.Tuber_TAGCGAGGCT.TTGCTCACGG_L007.hisat.sorted.bam",
+  "X5.5.H_m.No.ants.P2.Tuber_ATCATACCGC.ATGTCGTACT_L007.hisat.sorted.bam",
+  "X9.9.H_m.No.ants.P3.Tuber_TCTGACTATG.TAACCAGATC_L007.hisat.sorted.bam",
+  
+  "X74.76.H_m.Control_ants.P1.Warty_ATCTAACCTG.CCTGTGGTTC_L007.hisat.sorted.bam",
+  "X86.80.H_m.Control_ants.P2.Warty_AGCACCAGTC.CTCGTGTAGC_L007.hisat.sorted.bam",
+  "X87.84.H_m.Control_ants.P3.Warty_TACCTAGACT.GCATTCGAAT_L007.hisat.sorted.bam",
+  
+  "X75.77.H_m.Control_ants.P1.Smooth_GCGACAATAT.ATTCGTACGG_L007.hisat.sorted.bam",
+  "X79.81.H_m.Control_ants.P2.Smooth_TCCGAGATGC.TGTCACCTTA_L007.hisat.sorted.bam",
+  "X83.85.H_m.Control_ants.P3.Smooth_AATCGTGCGG.GTTCAGTAGA_L007.hisat.sorted.bam",
+  
+  "X73.75.H_m.Control_ants.P1.Tuber_CGCACATTAC.TGGAACGTAG_L007.hisat.sorted.bam",
+  "X77.79.H_m.Control_ants.P2.Tuber_GATCCACTTA.GTGTTCTGTT_L007.hisat.sorted.bam",
+  "X81.83.H_m.Control_ants.P3.Tuber_GCATTCCTTC.GAGCCTGCTT_L007.hisat.sorted.bam"
+)
+
+
+
+################
+
+###### intergrate this part
+
+gene_to_description_hm <-setNames(gene_description_data_no_duplicates$Gene_Description, gene_description_data_no_duplicates$Gene_Name)
+head(gene_to_description_hm)
+#######
+
+# Ensure selected_samples is correctly defined
+selected_samples <- samples_mixed  # Use your custom list of sample names here
+
+# Subset and reorder the DESeqDataSet based on selected_samples
+dds_filtered_hm <- dds_2_hm[, colnames(dds_2_hm) %in% selected_samples]
+
+# Reorder columns based on the exact order of selected_samples
+dds_filtered_hm <- dds_filtered_hm[, match(selected_samples, colnames(dds_filtered_hm))]
+
+# Verify the new order to confirm it matches selected_samples
+print(colnames(dds_filtered_hm))
+
+
+# Extract normalized counts from the filtered DESeqDataSet
+norm_counts_hm <- counts(dds_filtered_hm, normalized = TRUE)
+
+# Select only the nitrogen-related genes
+nitrogen_genes <- gene_description_data$Gene_Name
+# Count the number of genes in nitrogen_genes
+length(nitrogen_genes)
+print(gene_description_data)
+# Print all rows of gene_description_data
+print(gene_description_data, n = Inf)
+
+
+###### this code uses gene ids
+
+nitrogen_counts <- norm_counts_hm[rownames(norm_counts_hm) %in% nitrogen_genes, , drop = FALSE]
+
+length(nitrogen_counts)
+# Log-transform counts for better visualization
+log_counts <- log2(nitrogen_counts + 1)
+
+# Create a metadata dataframe for labels
+df_filt_hm <- as.data.frame(colData(dds_filtered_hm)[, c("Plant", "Tissue")])
+
+# Combine Plant and Tissue for custom labels
+custom_labels <- paste(df_filt_hm$Tissue, df_filt_hm$Plant, sep = "_")
+head(custom_labels)
+names(custom_labels) <- rownames(df_filt_hm)
+
+# Match the custom labels to column names in the heatmap
+final_labels <- custom_labels[colnames(log_counts)]
+
+# Generate heatmap with ComplexHeatmap
+Heatmap(
+  log_counts, 
+  name = "Expression",
+  cluster_rows = TRUE,
+  cluster_columns = FALSE,
+  show_row_names = TRUE,
+  show_column_names = TRUE,
+  column_labels = final_labels,  # Use custom labels for the x-axis
+  col = colorRampPalette(c("blue", "white", "red"))(100),
+  column_title = "Nitrogen-Related Genes (H.m)",
+  row_title = "Genes",
+  show_heatmap_legend = TRUE
+)
+
+
+length(log_counts)
+print(log_counts)
+
+sum(rowSums(log_counts) == 0)  # Count genes with zero values across all samples
+data_matrix <- data[nitrogen_genes, ]  # Ensure correct subsetting
+
+######## this code uses descriptions
+
+# Step 1: Create a mapping from Gene_Name to Gene_Description
+gene_to_description_hm <- setNames(gene_description_data_no_duplicates$Gene_Description, gene_description_data_no_duplicates$Gene_Name)
+head(gene_to_description_hm)
+
+#####
+# Combine Gene_Name and Gene_Description into a single string
+gene_to_description_hm <- setNames(
+  paste(gene_description_data_no_duplicates$Gene_Name, 
+        gene_description_data_no_duplicates$Gene_Description, 
+        sep = " - "), 
+  gene_description_data_no_duplicates$Gene_Name
+)
+
+# Display the first few entries
+head(gene_to_description_hm)
+
+
+#####
+# Ensure selected_samples is correctly defined
+selected_samples <- samples_mixed  # Use your custom list of sample names here
+
+# Step 2: Subset and reorder the DESeqDataSet based on selected_samples
+dds_filtered_hm <- dds_2_hm[, colnames(dds_2_hm) %in% selected_samples]
+dds_filtered_hm <- dds_filtered_hm[, match(selected_samples, colnames(dds_filtered_hm))]
+
+# Verify the new order to confirm it matches selected_samples
+print(colnames(dds_filtered_hm))
+
+# Step 3: Extract normalised counts from the filtered DESeqDataSet
+norm_counts_hm <- counts(dds_filtered_hm, normalized = TRUE)
+
+print(norm_counts_hm)
+
+# Step 4: Select only nitrogen-related genes
+nitrogen_genes <- gene_description_data$Gene_Name  # Assuming gene names are used for rownames
+print(nitrogen_genes)
+print(length(nitrogen_genes))
+# Remove duplicates from nitrogen_genes
+unique_nitrogen_genes <- unique(nitrogen_genes)
+
+# Count the number of unique genes
+length(unique_nitrogen_genes)
+
+nitrogen_counts <- norm_counts_hm[rownames(norm_counts_hm) %in% nitrogen_genes, , drop = FALSE]
+
+# Log-transform counts for better visualisation
+log_counts <- log2(nitrogen_counts + 1)
+
+# Step 5: Replace rownames in log_counts with corresponding descriptions
+rownames(log_counts) <- gene_to_description_hm[rownames(log_counts)]
+
+# Step 6: Create metadata for heatmap labels
+df_filt_hm <- as.data.frame(colData(dds_filtered_hm)[, c("Plant", "Tissue")])
+
+# Combine Plant and Tissue for custom labels
+custom_labels <- paste(df_filt_hm$Tissue, df_filt_hm$Plant, sep = "_")
+names(custom_labels) <- rownames(df_filt_hm)
+final_labels <- custom_labels[colnames(log_counts)]
+
+# Step 7: Generate heatmap with ComplexHeatmap
+## smaller description on the y axis plots
+Heatmap(
+  log_counts, 
+  name = "Expression",
+  cluster_rows = TRUE,
+  cluster_columns = FALSE,
+  show_row_names = TRUE,
+  show_column_names = TRUE,
+  column_labels = final_labels,  # Use custom labels for the x-axis
+  col = colorRampPalette(c("blue", "white", "red"))(100),
+  column_title = "Nitrogen-Related Genes (H.m)",
+  row_title = "Gene Descriptions",  # Updated title to reflect descriptions
+  show_heatmap_legend = TRUE,
+  row_names_gp = gpar(fontsize = 7)  # Decrease font size to fit longer descriptions
+)
+
+### different legend size
+Heatmap(
+  log_counts, 
+  name = "Expression",
+  cluster_rows = TRUE,
+  cluster_columns = FALSE,
+  show_row_names = TRUE,
+  show_column_names = TRUE,
+  column_labels = final_labels,
+  col = colorRampPalette(c("blue", "white", "red"))(100),
+  column_title = "Nitrogen-Related Genes (H.m)",
+  row_title = "Gene Descriptions",
+  heatmap_legend_param = list(
+    title = "Expression",
+    labels_gp = gpar(fontsize = 6),  # Smaller font for legend labels
+    title_gp = gpar(fontsize = 6)   # Smaller font for legend title
+  ),
+  row_names_gp = gpar(fontsize = 8)
+)
+##
+
+Heatmap(
+  log_counts, 
+  name = "Expression",
+  cluster_rows = TRUE,
+  cluster_columns = FALSE,
+  show_row_names = TRUE,
+  show_column_names = TRUE,
+  column_labels = final_labels,
+  col = colorRampPalette(c("blue", "white", "red"))(100),
+  column_title = "Nitrogen-Related Genes (H.m)",
+  row_title = "Gene Descriptions",
+  row_names_gp = gpar(fontsize = 9),  # Adjust font size if necessary
+  row_names_max_width = unit(12, "cm")  # Increase to a suitable value
+)
+
+#### right size for labels
+Heatmap(
+  log_counts, 
+  name = "Expression",
+  cluster_rows = TRUE,
+  cluster_columns = FALSE,
+  show_row_names = TRUE,
+  show_column_names = TRUE,
+  column_labels = final_labels,
+  col = colorRampPalette(c("blue", "white", "red"))(100),
+  column_title = "Nitrogen-Related Genes (H.m)",
+  row_title = "Gene Descriptions",
+  row_names_gp = gpar(fontsize = 9),  # Adjust row font size
+  column_names_gp = gpar(fontsize = 10),  # Adjust column font size
+  row_names_max_width = unit(12, "cm")  # Increase width for row names
+)
+
+
+# Step 1: Count all genes in nitrogen_genes
+total_nitrogen_genes <- length(nitrogen_genes)
+cat("Total genes in nitrogen_genes:", total_nitrogen_genes, "\n")
+
+# Step 2: Count how many nitrogen genes are present in the normalised count matrix
+nitrogen_genes_in_counts <- sum(rownames(norm_counts_hm) %in% nitrogen_genes)
+cat("Nitrogen genes found in norm_counts_hm:", nitrogen_genes_in_counts, "\n")
+
+# Step 3: Count the nitrogen genes that were plotted in log_counts
+nitrogen_genes_in_log_counts <- sum(!is.na(rownames(log_counts)))
+cat("Nitrogen genes with descriptions (plotted):", nitrogen_genes_in_log_counts, "\n")
+
+
