@@ -1,0 +1,214 @@
+# Paths
+featurescountdata_path_mb <- "C:/Users/bop21gwh/Documents/PhD work/hisat/featurescount_mb_with_M.b.gff.txt"
+meta_data_file_path_mb <- "C:/Users/bop21gwh/Documents/PhD work/genomics/Hisat2/metadata.csv"
+mb_gtf_file <- "C:/Users/bop21gwh/Documents/PhD work/hisat/output_file_m.b.tsv"
+
+# Libraries
+library(DESeq2)
+library(readr)
+library(dplyr)
+
+# Step 1: Load feature counts data
+countdata_features_mb <- read.table(featurescountdata_path_mb, header = TRUE, sep = "\t")
+cat("Count data dimensions:", dim(countdata_features_mb), "\n")
+print(colnames(countdata_features_mb))
+filtered_featurecounts_mb <- countdata_features_mb[, -c(2:6)]
+rownames(filtered_featurecounts_mb) <- filtered_featurecounts_mb$Geneid
+
+# Step 2: Load metadata
+meta_data_new_mb <- read.csv(meta_data_file_path_mb)
+filtered_meta_data_mb <- meta_data_new_mb[meta_data_new_mb$Species == "M.b", ]
+metadata_samples_mb <- filtered_meta_data_mb$Sample
+
+# Ensure alignment between metadata and count data
+countdata_mb_features <- colnames(filtered_featurecounts_mb)[-1]
+# insert code for 
+colnames(filtered_featurecounts_mb) <- gsub("^X\\.nobackup\\.qkdf72\\.hisat2\\.m\\.b_results\\.", "", colnames(filtered_featurecounts_mb))
+colnames(filtered_featurecounts_mb)[-1] <- paste0("X", colnames(filtered_featurecounts_mb)[-1])
+
+# extract colnames
+countdata_mb_features <- colnames(filtered_featurecounts_mb)[-1]
+print(countdata_mb_features)
+
+countdata_filtered_features_mb <- filtered_featurecounts_mb[, match(metadata_samples_mb, countdata_mb_features) + 1]
+rownames(countdata_filtered_features_mb) <- filtered_featurecounts_mb$Geneid
+
+
+# Step 3: Create DESeq2 dataset
+dds_mb <- DESeqDataSetFromMatrix(
+  countData = round(countdata_filtered_features_mb),
+  colData = filtered_meta_data_mb,
+  design = ~ Tissue
+)
+dds_2_mb <- DESeq(dds_mb)
+
+# Step 4: Load GTF data and search for specific gene functions
+interpro_data_mb <- read_tsv(mb_gtf_file, col_names = FALSE)
+colnames(interpro_data_mb) <- c("Protein_ID", "MD5sum", "Length", "Database", "Database_Acc", 
+                                "Description", "Start", "End", "E-value", "Status", "Date", 
+                                "InterPro_ID", "InterPro_Desc", "GO_Terms", "Pathways")
+
+keywords2 <- c("Amino acid permease", "nitrite", "nitrate")
+filtered_data_mb <- interpro_data_mb %>% 
+  filter(grepl(paste(keywords2, collapse = "|"), Description, ignore.case = TRUE) | 
+           grepl(paste(keywords2, collapse = "|"), InterPro_Desc, ignore.case = TRUE))
+
+gene_description_data_mb <- filtered_data_mb %>% 
+  select(Protein_ID, Description) %>% 
+  rename(Gene_Name = Protein_ID, Gene_Description = Description) %>% 
+  distinct(Gene_Name, .keep_all = TRUE)
+gene_description_data_mb$Gene_Name <- gsub("\\.\\d+$", "", gene_description_data_mb$Gene_Name)
+
+# Step 5: Combine DESeq2 results with gene descriptions
+gene_to_description_mb <- setNames(
+  paste(gene_description_data_mb$Gene_Name, 
+        gene_description_data_mb$Gene_Description, sep = " - "), 
+  gene_description_data_mb$Gene_Name
+)
+
+samples_mb <- c(
+  "X45.47.M_b.Fertilizer.P1.Control_cavity_warty_AGACGACAGA.GAGCTGGAAT_L007.hisat.sorted.bam",
+  "X52.54.M_b.Fertilizer.P2.Control_cavity_warty_ACTCGTCCAG.TGGTCCTCGT_L007.hisat.sorted.bam",
+  "X59.61.M_b.Fertilizer.P3.Control_cavity_warty_CTCTCTCTAG.ACTTGATTGG_L007.hisat.sorted.bam",
+  "X46.48.M_b.Fertilizer.P1.Control_cavity_smooth_TAGGTCCAGA.TGCTCATCCG_L007.hisat.sorted.bam",
+  "X53.55.M_b.Fertilizer.P2.Control_cavity_smooth_TCCGGAGAAC.ATTCCTCTGG_L007.hisat.sorted.bam",
+  "X60.62.M_b.Fertilizer.P3.Control_cavity_smooth_AAGGCTCCAT.TGAAGATGGA_L007.hisat.sorted.bam",
+  "X44.46.M_b.Fertilizer.P1.Control_cavity_tuber_TCAGCTGTCA.ACAGCTCCTG_L007.hisat.sorted.bam",
+  "X51.53.M_b.Fertilizer.P2.Control_cavity_tuber_CAACTACCGC.ATGCTGCAGG_L007.hisat.sorted.bam",
+  "X58.60.M_b.Fertilizer.P3.Control_cavity_tuber_CGGATCATTA.CCGTAACCTT_L007.hisat.sorted.bam",
+  "X42.44.M_b.Fertilizer.P1.Fertilzer_cavity_warty_TCGCTGAGAG.AATGCTCTAG_L007.hisat.sorted.bam",
+  "X49.51.M_b.Fertilizer.P2.Fertilzer_cavity_warty_CTTGTTACTG.AATTCGGTGG_L007.hisat.sorted.bam",
+  "X56.58.M_b.Fertilizer.P3.Fertilzer_cavity_warty_ATACACACCT.AGTGTGATAG_L007.hisat.sorted.bam",
+  "X43.45.M_b.Fertilizer.P1.Fertilzer_cavity_smooth_CGCTAATTGC.CCATCGCATT_L007.hisat.sorted.bam",
+  "X50.52.M_b.Fertilizer.P2.Fertilzer_cavity_smooth_TCACCGTGGT.TCGCTCTGCT_L007.hisat.sorted.bam",
+  "X57.59.M_b.Fertilizer.P3.Fertilzer_cavity_smooth_AGCCTCTGCT.TTCGCCTTAG_L007.hisat.sorted.bam",
+  "X41.43.M_b.Fertilizer.P1.Fertilzer_cavity_tuber_CCTACTCTGC.TGCAATTGGC_L007.hisat.sorted.bam",
+  "X48.50.M_b.Fertilizer.P2.Fertilzer_cavity_tuber_GATAGGTGAA.AGACGCAAGA_L007.hisat.sorted.bam",
+  "X55.57.M_b.Fertilizer.P3.Fertilzer_cavity_tuber_CCGAAGGTTC.TCTATCTGAC_L007.hisat.sorted.bam"
+)
+
+dds_filtered_mb <- dds_2_mb[, colnames(dds_2_mb) %in% selected_samples]
+dds_filtered_mb <- dds_filtered_mb[, match(selected_samples, colnames(dds_filtered_mb))]
+norm_counts_mb <- counts(dds_filtered_mb, normalized = TRUE)
+
+# Step 6: Extract nitrogen-related genes
+nitrogen_genes_mb <- gene_description_data_mb$Gene_Name
+unique_nitrogen_genes_mb <- unique(nitrogen_genes_mb)
+nitrogen_counts_mb <- norm_counts_mb[rownames(norm_counts_mb) %in% nitrogen_genes_mb, , drop = FALSE]
+
+# Summary statistics
+num_genes <- nrow(norm_counts_mb)
+num_unique_genes <- length(unique_nitrogen_genes_mb)
+cat("Number of genes in norm_counts_mb:", num_genes, "\n")
+cat("Number of unique nitrogen-related genes:", num_unique_genes, "\n")
+
+
+
+
+
+
+
+# Step 1: Create a mapping from Gene_Name to Gene_Description
+gene_to_description_mb <- setNames(gene_description_data_no_duplicates_mb$Gene_Description, gene_description_data_no_duplicates_mb$Gene_Name)
+head(gene_to_description_mb)
+
+#####
+# Combine Gene_Name and Gene_Description into a single string
+gene_to_description_mb <- setNames(
+  paste(gene_description_data_no_duplicates_mb$Gene_Name, 
+        gene_description_data_no_duplicates_mb$Gene_Description, 
+        sep = " - "), 
+  gene_description_data_no_duplicates_mb$Gene_Name
+)
+
+# Display the first few entries
+head(gene_to_description_mb)
+###################################################
+
+# Ensure selected_samples is correctly defined
+selected_samples <- samples_mb  # Use your custom list of sample names here
+
+# Step 2: Subset and reorder the DESeqDataSet based on selected_samples
+dds_filtered_mb <- dds_2_mb[, colnames(dds_2_mb) %in% selected_samples]
+dds_filtered_mb <- dds_filtered_mb[, match(selected_samples, colnames(dds_filtered_mb))]
+
+# Verify the new order to confirm it matches selected_samples
+print(colnames(dds_filtered_mb))
+
+# Step 3: Extract normalised counts from the filtered DESeqDataSet
+norm_counts_mb <- counts(dds_filtered_mb, normalized = TRUE)
+
+print(norm_counts_mb)
+##################################################
+
+# Step 4: Select only nitrogen-related genes
+nitrogen_genes_mb <- gene_description_data_mb$Gene_Name  # Assuming gene names are used for rownames
+print(nitrogen_genes_mb)
+print(gene_description_data_mb$Gene_Description)
+head(gene_description_data_mb)
+print(length(nitrogen_genes_mb))
+print(nitrogen_genes_mb)
+# Remove duplicates from nitrogen_genes
+unique_nitrogen_genes_mb <- unique(nitrogen_genes_mb)
+
+# Count the number of unique genes
+length(unique_nitrogen_genes)
+
+nitrogen_counts_mb <- norm_counts_mb[rownames(norm_counts_mb) %in% nitrogen_genes_mb, , drop = FALSE]
+head(nitrogen_counts_mb)
+
+# Count the number of rows in the normalised counts matrix
+num_genes <- nrow(norm_counts_mb)
+
+# Print the result
+print(paste("Number of genes in norm_counts_mb:", num_genes))
+
+##
+# Remove duplicates from nitrogen_genes_mb
+unique_nitrogen_genes_mb <- unique(nitrogen_genes_mb)
+
+# Count the number of unique genes
+num_unique_genes <- length(unique_nitrogen_genes_mb)
+
+# Print the results
+print(paste("Number of unique genes:", num_unique_genes))
+print(unique_nitrogen_genes_mb)
+
+nitrogen_counts_mb <- norm_counts_mb[rownames(norm_counts_mb) %in% unique_nitrogen_genes_mb, , drop = FALSE]
+head(nitrogen_counts_mb)
+
+###################################################
+# Log-transform counts for better visualisation
+log_counts_mb <- log2(nitrogen_counts_mb + 1)
+
+print(log_counts_mb)
+
+# Step 5: Replace rownames in log_counts with corresponding descriptions
+rownames(log_counts_mb) <- gene_to_description_mb[rownames(log_counts_mb)]
+
+# Step 6: Create metadata for heatmap labels
+df_filt_mb <- as.data.frame(colData(dds_filtered_mb)[, c("Plant", "Tissue")])
+
+# Combine Plant and Tissue for custom labels
+custom_labels <- paste(df_filt_mb$Tissue, df_filt_mb$Plant, sep = "_")
+names(custom_labels) <- rownames(df_filt_mb)
+final_labels <- custom_labels[colnames(log_counts_mb)]
+
+#### right size for labels
+library(ComplexHeatmap)
+
+Heatmap(
+  log_counts_mb, 
+  name = "Expression",
+  cluster_rows = TRUE,
+  cluster_columns = FALSE,
+  show_row_names = TRUE,
+  show_column_names = TRUE,
+  column_labels = final_labels,
+  col = colorRampPalette(c("blue", "white", "red"))(100),
+  column_title = "Nitrogen-Related Genes (M.b)",
+  row_title = "Gene Descriptions",
+  row_names_gp = gpar(fontsize = 9),  # Adjust row font size
+  column_names_gp = gpar(fontsize = 10),  # Adjust column font size
+  row_names_max_width = unit(12, "cm")  # Increase width for row names
+)
